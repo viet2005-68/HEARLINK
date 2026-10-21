@@ -1,4 +1,4 @@
-package com.example.heartlink;
+package com.vippro.heartlink;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
