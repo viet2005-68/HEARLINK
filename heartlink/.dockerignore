@@ -1,0 +1,11 @@
+.git/
+.gitignore
+.gitattributes
+docker-compose.yml
+seed/
+.idea/
+.vscode/
+.settings/
+*.iml
+*.md
+*.log

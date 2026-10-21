@@ -1,0 +1,55 @@
+-- ===== Heartlink - Demo seed data =====
+-- Chạy sau khi app đã khởi động (Hibernate tạo bảng):
+--   make seed
+-- hoặc:
+--   docker compose exec -T postgres psql -U postgres -d heartlink < seed/seed.sql
+
+-- Reset dữ liệu (CASCADE xóa luôn swipes + matches tham chiếu users)
+TRUNCATE TABLE users RESTART IDENTITY CASCADE;
+
+-- ===== Users =====
+INSERT INTO users (email, password_hash, name, bio, created_at) VALUES
+    ('anna@example.com',   '$2a$10$seedhashseedhashseedha', 'Anna',   'Thích đọc sách, đi dạo công viên', NOW()),
+    ('binh@example.com',   '$2a$10$seedhashseedhashseedha', 'Binh',   'Yêu bóng đá, mua sắm',             NOW()),
+    ('carmen@example.com', '$2a$10$seedhashseedhashseedha', 'Carmen', 'Làm đẹp, du lịch',                 NOW()),
+    ('david@example.com',  '$2a$10$seedhashseedhashseedha', 'David',  'Game thủ, thích lập trình',        NOW()),
+    ('eva@example.com',    '$2a$10$seedhashseedhashseedha', 'Eva',    'Ẩm thực, yoga',                    NOW()),
+    ('frank@example.com',  '$2a$10$seedhashseedhashseedha', 'Frank',  'Thể thao, gia đình',               NOW()),
+    ('grace@example.com',  '$2a$10$seedhashseedhashseedha', 'Grace',  'Âm nhạc, học tiếng Anh',           NOW()),
+    ('henry@example.com',  '$2a$10$seedhashseedhashseedha', 'Henry',  'Lập trình web, leo núi',           NOW());
+
+-- ===== Swipes (like / pass) =====
+INSERT INTO swipes (swiper_id, target_id, action, created_at) VALUES
+    -- Anna (1)
+    (1, 2, 'LIKE', NOW()),
+    (1, 3, 'LIKE', NOW()),
+    (1, 4, 'LIKE', NOW()),
+    -- Binh (2)
+    (2, 1, 'LIKE', NOW()),
+    -- Carmen (3)
+    (3, 1, 'LIKE', NOW()),
+    (3, 4, 'PASS', NOW()),
+    -- David (4)
+    (4, 1, 'LIKE', NOW()),
+    (4, 5, 'LIKE', NOW()),
+    (4, 7, 'LIKE', NOW()),
+    -- Eva (5)
+    (5, 7, 'LIKE', NOW()),
+    -- Frank (6)
+    (6, 5, 'LIKE', NOW()),
+    (6, 7, 'LIKE', NOW()),
+    -- Grace (7)
+    (7, 4, 'LIKE', NOW()),
+    (7, 6, 'PASS', NOW()),
+    -- Henry (8)
+    (8, 1, 'PASS', NOW()),
+    (8, 3, 'LIKE', NOW());
+
+-- ===== Matches (cặp đã like nhau) =====
+-- Ràng buộc: user_a_id < user_b_id, UNIQUE (user_a_id, user_b_id)
+INSERT INTO matches (user_a_id, user_b_id, status, created_at) VALUES
+    (1, 2, 'ACTIVE', NOW()),  -- Anna  <-> Binh
+    (1, 4, 'ACTIVE', NOW()),  -- Anna  <-> David
+    (3, 4, 'ACTIVE', NOW()),  -- Carmen <-> David
+    (5, 6, 'ACTIVE', NOW()),  -- Eva   <-> Frank
+    (6, 7, 'ACTIVE', NOW());  -- Frank <-> Grace
