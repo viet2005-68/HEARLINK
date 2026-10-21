@@ -24,20 +24,65 @@ Dating backend — Phase 1. Spring Boot 4.1 (Java 21) + PostgreSQL 16, single de
 love_love/
 ├── README.md
 └── heartlink/
-    ├── docker-compose.yml    # postgres + app
-    ├── seed/seed.sql         # demo data
-    ├── Dockerfile            # packages the pre-built JAR
+    ├── docker-compose.yml     # postgres + app
+    ├── Dockerfile             # packages the pre-built JAR
+    ├── .dockerignore
+    ├── .gitignore
     ├── pom.xml
-    ├── mvnw
-    └── src/main/
-        ├── java/com/vippro/heartlink/
-        │   └── entity/       # User, Swipe, Match (+ enums)
-        └── resources/
-            ├── application.properties
-            └── application-docker.properties
+    ├── mvnw / mvnw.cmd
+    ├── seed/seed.sql          # demo data
+    └── src/
+        ├── main/java/com/vippro/heartlink/   # see Package structure
+        ├── main/resources/
+        │   ├── application.properties
+        │   └── application-docker.properties
+        └── test/java/com/vippro/heartlink/   # mirrors main packages
 ```
 
 All commands below are run from `heartlink/`.
+
+## Package structure
+
+Standard layered service. `entity/` exists today; the other packages are added as each endpoint is implemented.
+
+```text
+src/main/java/com/vippro/heartlink/
+├── HeartlinkApplication.java
+├── config/           # Security, OpenAPI, CORS, Jackson, async
+├── controller/       # REST controllers (HTTP layer)
+├── dto/              # request / response models
+│   ├── request/
+│   └── response/
+├── entity/           # JPA entities + enums (User, Swipe, Match)
+├── exception/        # domain exceptions + global handler
+├── mapper/           # entity <-> DTO conversion
+├── repository/       # Spring Data JPA interfaces
+└── service/          # business logic
+    └── impl/
+```
+
+| Package | Responsibility | Rules |
+|---|---|---|
+| `controller` | Expose REST endpoints, validate input, return DTOs | No business logic; never return entities |
+| `dto` | Request / response payloads (`record` whenever possible) | Entities never leave the service layer |
+| `service` | Business rules and transaction boundaries | `@Transactional`; one public method = one use case |
+| `repository` | Data access (`JpaRepository<Entity, Long>`) | Queries only, no business logic |
+| `entity` | Table mapping | No JSON / validation annotations |
+| `mapper` | Entity ↔ DTO conversion | Static methods (or MapStruct later) |
+| `config` | Beans and framework configuration | `@Configuration` classes only |
+| `exception` | Error types and error handling | One `@RestControllerAdvice` maps to HTTP status |
+
+Example of the flow for a single use case:
+
+```text
+HTTP request
+  -> Controller        takes the request DTO, validates it
+  -> Service           business rules, @Transactional
+  -> Repository        loads / saves entities
+  -> Mapper            entity -> response DTO
+  -> Controller        returns the response DTO
+HTTP response
+```
 
 ## Run
 
