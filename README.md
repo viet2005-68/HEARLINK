@@ -43,46 +43,19 @@ All commands below are run from `heartlink/`.
 
 ## Package structure
 
-Standard layered service. `entity/` exists today; the other packages are added as each endpoint is implemented.
+The existing JPA schema is in `entity/`. Endpoint code is organized by capability, with repository and shared error handling packages:
 
 ```text
 src/main/java/com/vippro/heartlink/
 ├── HeartlinkApplication.java
-├── config/           # Security, OpenAPI, CORS, Jackson, async
-├── controller/       # REST controllers (HTTP layer)
-├── dto/              # request / response models
-│   ├── request/
-│   └── response/
+├── common/error/     # Shared { error: { code, message } } responses
 ├── entity/           # JPA entities + enums (User, Swipe, Match)
-├── exception/        # domain exceptions + global handler
-├── mapper/           # entity <-> DTO conversion
+├── match/            # Versioned match API, business logic and DTOs
 ├── repository/       # Spring Data JPA interfaces
-└── service/          # business logic
-    └── impl/
+└── ...               # Other business modules as they are implemented
 ```
 
-| Package | Responsibility | Rules |
-|---|---|---|
-| `controller` | Expose REST endpoints, validate input, return DTOs | No business logic; never return entities |
-| `dto` | Request / response payloads (`record` whenever possible) | Entities never leave the service layer |
-| `service` | Business rules and transaction boundaries | `@Transactional`; one public method = one use case |
-| `repository` | Data access (`JpaRepository<Entity, Long>`) | Queries only, no business logic |
-| `entity` | Table mapping | No JSON / validation annotations |
-| `mapper` | Entity ↔ DTO conversion | Static methods (or MapStruct later) |
-| `config` | Beans and framework configuration | `@Configuration` classes only |
-| `exception` | Error types and error handling | One `@RestControllerAdvice` maps to HTTP status |
-
-Example of the flow for a single use case:
-
-```text
-HTTP request
-  -> Controller        takes the request DTO, validates it
-  -> Service           business rules, @Transactional
-  -> Repository        loads / saves entities
-  -> Mapper            entity -> response DTO
-  -> Controller        returns the response DTO
-HTTP response
-```
+Each module keeps its HTTP controller, service and DTOs close to its domain; JPA entities stay internal and are not returned directly.
 
 ## Run
 
@@ -115,6 +88,42 @@ docker compose up -d postgres
 | API | <http://localhost:8080> |
 | Swagger UI | <http://localhost:8080/swagger-ui/index.html> |
 | PostgreSQL | `localhost:5432` — db `heartlink`, user `postgres`, password `123456` |
+
+## Match API v1
+
+The match endpoints use the existing `matches` table and schema. For now, the current user is supplied through `X-User-Id` because JWT authentication has not been implemented yet. This header is a development integration point, not secure authentication.
+
+```http
+GET /api/v1/matches?limit=20&offset=0
+X-User-Id: 1
+```
+
+Returns only active matches involving that user. `limit` defaults to 20 and is capped at 50; `offset` defaults to 0. Each result exposes the other user's public profile fields, plus status and creation time.
+
+```http
+DELETE /api/v1/matches/1
+X-User-Id: 1
+```
+
+Returns `204 No Content` when the active match belongs to the user. It soft-cancels the match by setting `status=CANCELLED` and `cancelled_at`; the match row and old swipe records remain. Missing/inactive/non-owned matches return a shared JSON error envelope.
+
+Example response:
+
+```json
+{
+  "items": [
+    {
+      "id": 42,
+      "user": { "id": 2, "name": "Binh", "bio": "Yêu bóng đá" },
+      "status": "ACTIVE",
+      "createdAt": "2026-10-21T10:00:00Z"
+    }
+  ],
+  "limit": 20,
+  "offset": 0,
+  "total": 1
+}
+```
 
 ## Useful commands
 

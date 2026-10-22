@@ -14,6 +14,10 @@ import java.time.Instant;
 @Table(name = "matches",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uq_match_pair", columnNames = {"user_a_id", "user_b_id"})
+        },
+        indexes = {
+                @Index(name = "idx_matches_user_a_status_created", columnList = "user_a_id,status,created_at"),
+                @Index(name = "idx_matches_user_b_status_created", columnList = "user_b_id,status,created_at")
         })
 @Getter
 @Setter
