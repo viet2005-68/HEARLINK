@@ -1,5 +1,6 @@
 package com.vippro.heartlink.match;
 
+import com.vippro.heartlink.common.security.CurrentUser;
 import com.vippro.heartlink.match.dto.MatchPageResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -8,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,7 +26,7 @@ public class MatchController {
 
     @GetMapping
     public MatchPageResponse list(
-            @RequestHeader("X-User-Id") Long userId,
+            @RequestAttribute(CurrentUser.ID) Long userId,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit,
             @RequestParam(defaultValue = "0") @Min(0) long offset) {
         return matchService.listActive(userId, limit, offset);
@@ -33,7 +34,7 @@ public class MatchController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> cancel(
-            @RequestHeader("X-User-Id") Long userId,
+            @RequestAttribute(CurrentUser.ID) Long userId,
             @PathVariable("id") @Min(1) Long matchId) {
         matchService.cancel(userId, matchId);
         return ResponseEntity.noContent().build();

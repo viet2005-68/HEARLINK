@@ -1,8 +1,7 @@
 package com.vippro.heartlink.common.error;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -24,10 +23,10 @@ public class GlobalExceptionHandler {
                 .body(ApiError.of("VALIDATION_ERROR", "Request parameters are invalid"));
     }
 
-    @ExceptionHandler(MissingRequestHeaderException.class)
-    public ResponseEntity<ApiError> handleMissingHeader(MissingRequestHeaderException exception) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiError.of("UNAUTHENTICATED", "X-User-Id header is required"));
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.of("VALIDATION_ERROR", "Request body is missing or malformed"));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
