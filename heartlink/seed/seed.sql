@@ -4,19 +4,20 @@
 -- hoặc:
 --   docker compose exec -T postgres psql -U postgres -d heartlink < seed/seed.sql
 
--- Reset dữ liệu (CASCADE xóa luôn swipes + matches tham chiếu users)
+-- Reset dữ liệu (CASCADE xóa luôn swipes + matches + refresh_tokens tham chiếu users)
 TRUNCATE TABLE users RESTART IDENTITY CASCADE;
 
 -- ===== Users =====
+-- Mật khẩu của tất cả user: 123456 (BCrypt)
 INSERT INTO users (email, password_hash, name, bio, created_at) VALUES
-    ('anna@example.com',   '$2a$10$seedhashseedhashseedha', 'Anna',   'Thích đọc sách, đi dạo công viên', NOW()),
-    ('binh@example.com',   '$2a$10$seedhashseedhashseedha', 'Binh',   'Yêu bóng đá, mua sắm',             NOW()),
-    ('carmen@example.com', '$2a$10$seedhashseedhashseedha', 'Carmen', 'Làm đẹp, du lịch',                 NOW()),
-    ('david@example.com',  '$2a$10$seedhashseedhashseedha', 'David',  'Game thủ, thích lập trình',        NOW()),
-    ('eva@example.com',    '$2a$10$seedhashseedhashseedha', 'Eva',    'Ẩm thực, yoga',                    NOW()),
-    ('frank@example.com',  '$2a$10$seedhashseedhashseedha', 'Frank',  'Thể thao, gia đình',               NOW()),
-    ('grace@example.com',  '$2a$10$seedhashseedhashseedha', 'Grace',  'Âm nhạc, học tiếng Anh',           NOW()),
-    ('henry@example.com',  '$2a$10$seedhashseedhashseedha', 'Henry',  'Lập trình web, leo núi',           NOW());
+    ('anna@example.com',   '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Anna',   'Thích đọc sách, đi dạo công viên', NOW()),
+    ('binh@example.com',   '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Binh',   'Yêu bóng đá, mua sắm',             NOW()),
+    ('carmen@example.com', '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Carmen', 'Làm đẹp, du lịch',                 NOW()),
+    ('david@example.com',  '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'David',  'Game thủ, thích lập trình',        NOW()),
+    ('eva@example.com',    '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Eva',    'Ẩm thực, yoga',                    NOW()),
+    ('frank@example.com',  '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Frank',  'Thể thao, gia đình',               NOW()),
+    ('grace@example.com',  '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Grace',  'Âm nhạc, học tiếng Anh',           NOW()),
+    ('henry@example.com',  '$2a$10$DuSMEmXqBUBN2MaSDuCix.pqSO30r5FflH..jSf2yTzCgygxHwqva', 'Henry',  'Lập trình web, leo núi',           NOW());
 
 -- ===== Swipes (like / pass) =====
 INSERT INTO swipes (swiper_id, target_id, action, created_at) VALUES
