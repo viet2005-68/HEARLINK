@@ -175,6 +175,6 @@ Tables are created by Hibernate on startup (`spring.jpa.hibernate.ddl-auto=updat
 | `matches` | Matched pair (`user_a_id` < `user_b_id`), `status` = `ACTIVE` / `CANCELLED` |
 | `refresh_tokens` | Hashed refresh tokens with `expires_at` / `revoked_at` |
 
-Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique. The `swiper_id <> target_id` and `user_a_id < user_b_id` rules are business rules handled in the service layer.
+Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique, and foreign keys to users. PostgreSQL does not currently enforce `swiper_id <> target_id` or `user_a_id < user_b_id`; the swipe/match creation services are not implemented yet, so these rules still need enforcement. In particular, the match unique constraint alone permits both `(A, B)` and `(B, A)`.
 
 > Credentials in `docker-compose.yml` / `application*.properties` are dev defaults only — replace them with environment variables or secrets before deploying anywhere real.
