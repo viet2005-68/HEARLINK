@@ -53,6 +53,8 @@ src/main/java/com/example/heartlink/
 ├── common/security/  # JWT issuing/verification + shared auth filter
 ├── entity/           # JPA entities + enums (User, Swipe, Match, RefreshToken)
 ├── match/            # Versioned match API, business logic and DTOs
+├── recommendation/   # Unswiped public profiles + DTOs
+├── swipe/            # Like/pass and mutual matching + DTOs
 ├── repository/       # Spring Data JPA interfaces
 └── ...               # Other business modules as they are implemented
 ```
@@ -116,6 +118,74 @@ Wrong email or password → `401 INVALID_CREDENTIALS`.
 
 Access tokens are stateless HS256 JWTs and simply expire after `expires_in`; logout revokes the refresh token so no new access tokens can be obtained. Refresh tokens are stored only as SHA-256 hashes in `refresh_tokens` and live 7 days. Config: `app.jwt.secret` (env `JWT_SECRET`, ≥ 32 bytes), `app.jwt.expires-in`, `app.jwt.refresh-expires-in`.
 
+## Recommendations and Swipe API v1
+
+Both endpoints require `Authorization: Bearer <access_token>`.
+
+### GET /api/v1/recommendations?limit=20
+
+Returns `{ "items": [{ "id": 17, "name": "Linh", "bio": "Thích leo núi" }] }`.
+Excludes the current user and every profile they have already liked or passed.
+Incoming likes do not exclude a profile. Results are ordered by user ID.
+Empty results return `items: []`.
+`limit` defaults to 20; values outside 1–50 or invalid numbers return 400.
+Missing/invalid tokens and deleted current users return 401.
+
+### POST /api/v1/swipes
+
+Request: `{ "target_id": 17, "action": "like" }`. Only lowercase `like` and `pass` are accepted.
+The swiper ID always comes from the JWT, never the request body.
+
+Response 201 without a match:
+
+```json
+{ "swipe_id": 903, "matched": false, "match": null }
+```
+Response 201 for the second mutual like:
+
+```json
+{ "swipe_id": 904, "matched": true, "match": { "id": 55, "with_user_id": 17 } }
+```
+
+| Status | Reason / error code |
+|---|---|
+| 400 | Invalid body/action/target ID (`VALIDATION_ERROR`), self-swipe (`SELF_SWIPE`) |
+| 401 | Missing/invalid token (`UNAUTHENTICATED`), deleted caller (`USER_NOT_FOUND`) |
+| 404 | Target does not exist (`TARGET_NOT_FOUND`) |
+| 409 | Already liked or passed this target (`ALREADY_SWIPED`) |
+
+The service saves the swipe and any resulting match in one READ_COMMITTED transaction.
+It locks both user rows in ascending ID order before checking existing swipes.
+Concurrent swipes involving the same user wait for the lock. Matches use
+`user_a_id < user_b_id`; database unique constraints prevent duplicate pairs.
+Cancelling a match keeps both swipes, so neither participant can swipe again.
+All swipe writes must use this locking order. Lock contention can be measured in Phase 2.
+
+## Testing the Phase 1 flow
+
+Requires JDK 21 and Maven dependency access. Unit tests without PostgreSQL:
+
+```bash
+./mvnw -Dtest=AuthServiceTests,JwtServiceTests,JwtAuthFilterTests,RecommendationServiceTests,SwipeServiceTests test
+```
+
+PostgreSQL integration tests create/drop the schema in `heartlink_test` on port 55432.
+Use the separate database provided by `docker-compose.test.yml`.
+
+```bash
+docker compose -f docker-compose.test.yml up -d --wait
+HEARTLINK_DB_TESTS=true ./mvnw -Dtest=Phase1ApiTests test
+docker compose -f docker-compose.test.yml down -v
+```
+
+The integration suite checks HTTP authentication/validation/JSON, recommendation limits
+and exclusions, mutual likes, cancellation without reswiping, concurrent reciprocal and
+duplicate swipes, and rollback when match insertion fails. It is skipped unless
+`HEARTLINK_DB_TESTS=true`.
+
+Demo seed derives matches directly from reciprocal LIKE rows. For the eight users,
+the expected match pairs are `(1,2)`, `(1,3)`, `(1,4)`, `(4,7)`.
+
 ## Match API v1
 
 The match endpoints use the existing `matches` table and schema and require a Bearer token (see Auth API).
@@ -175,6 +245,6 @@ Tables are created by Hibernate on startup (`spring.jpa.hibernate.ddl-auto=updat
 | `matches` | Matched pair (`user_a_id` < `user_b_id`), `status` = `ACTIVE` / `CANCELLED` |
 | `refresh_tokens` | Hashed refresh tokens with `expires_at` / `revoked_at` |
 
-Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique, and foreign keys to users. PostgreSQL does not currently enforce `swiper_id <> target_id` or `user_a_id < user_b_id`; the swipe/match creation services are not implemented yet, so these rules still need enforcement. In particular, the match unique constraint alone permits both `(A, B)` and `(B, A)`.
+Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique, and foreign keys to users. PostgreSQL does not currently enforce `swiper_id <> target_id` or `user_a_id < user_b_id`; `SwipeService` rejects self-swipes and sorts the user IDs before creating a match. The match unique constraint alone would permit both `(A, B)` and `(B, A)`, so all match writers must preserve that order.
 
 > Credentials in `docker-compose.yml` / `application*.properties` are dev defaults only — replace them with environment variables or secrets before deploying anywhere real.
