@@ -1,5 +1,6 @@
 package com.example.heartlink.common.error;
 
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -17,7 +18,8 @@ public class GlobalExceptionHandler {
                 .body(ApiError.of(exception.getCode(), exception.getMessage()));
     }
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, HandlerMethodValidationException.class})
+    @ExceptionHandler({MethodArgumentNotValidException.class, HandlerMethodValidationException.class,
+            ConstraintViolationException.class})
     public ResponseEntity<ApiError> handleValidation(Exception exception) {
         return ResponseEntity.badRequest()
                 .body(ApiError.of("VALIDATION_ERROR", "Request parameters are invalid"));
