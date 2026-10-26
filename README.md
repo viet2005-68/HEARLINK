@@ -32,11 +32,11 @@ love_love/
     ├── mvnw / mvnw.cmd
     ├── seed/seed.sql          # demo data
     └── src/
-        ├── main/java/com/vippro/heartlink/   # see Package structure
+        ├── main/java/com/example/heartlink/   # see Package structure
         ├── main/resources/
         │   ├── application.properties
         │   └── application-docker.properties
-        └── test/java/com/vippro/heartlink/   # mirrors main packages
+        └── test/java/com/example/heartlink/   # mirrors main packages
 ```
 
 All commands below are run from `heartlink/`.
@@ -46,7 +46,7 @@ All commands below are run from `heartlink/`.
 The existing JPA schema is in `entity/`. Endpoint code is organized by capability, with repository and shared error handling packages:
 
 ```text
-src/main/java/com/vippro/heartlink/
+src/main/java/com/example/heartlink/
 ├── HeartlinkApplication.java
 ├── auth/             # Register / login / refresh / logout + DTOs
 ├── common/error/     # Shared { error: { code, message } } responses
