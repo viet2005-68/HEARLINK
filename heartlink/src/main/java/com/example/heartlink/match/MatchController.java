@@ -59,7 +59,8 @@ public class MatchController {
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Đã hủy match", content = @Content),
             @ApiResponse(responseCode = "401", description = "Thiếu hoặc token không hợp lệ", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Match không tìm thấy hoặc không thuộc về user", content = @Content)
+            @ApiResponse(responseCode = "403", description = "Người dùng không thuộc match đang hoạt động này", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Match không tồn tại hoặc đã hủy", content = @Content)
     })
     public ResponseEntity<Void> cancel(
             @Parameter(hidden = true) @RequestAttribute(CurrentUser.ID) Long userId,

@@ -63,8 +63,12 @@ public class MatchService {
         int updated = matchRepository.cancelForUser(
                 matchId, userId, MatchStatus.ACTIVE, MatchStatus.CANCELLED);
         if (updated == 0) {
+            if (matchRepository.existsByIdAndStatus(matchId, MatchStatus.ACTIVE)) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "MATCH_FORBIDDEN",
+                        "Only participants can cancel this match");
+            }
             throw new ApiException(HttpStatus.NOT_FOUND, "MATCH_NOT_FOUND",
-                    "Active match was not found for this user");
+                    "Active match was not found");
         }
     }
 

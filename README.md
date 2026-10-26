@@ -132,7 +132,7 @@ DELETE /api/v1/matches/1
 Authorization: Bearer <access_token>
 ```
 
-Returns `204 No Content` when the active match belongs to the user. It soft-cancels the match by setting `status=CANCELLED` and `cancelled_at`; the match row and old swipe records remain. Missing/inactive/non-owned matches return a shared JSON error envelope.
+Returns `204 No Content` when the active match belongs to the user. It soft-cancels the match by setting `status=CANCELLED` and `cancelled_at`; the match row and old swipe records remain. An active match owned by other users returns `403 MATCH_FORBIDDEN`; a missing or cancelled match returns `404 MATCH_NOT_FOUND`. Errors use the shared JSON envelope.
 
 Example response:
 
