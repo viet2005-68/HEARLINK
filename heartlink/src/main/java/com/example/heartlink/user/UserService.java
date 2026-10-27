@@ -41,9 +41,10 @@ public class UserService {
             }
             user.setName(name);
         }
-        if (request.bio() != null) {
+        if (request.bioProvided()) {
+            // An explicit JSON null clears the bio.
             String bio = request.bio();
-            if (bio.length() > 500) {
+            if (bio != null && bio.length() > 500) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
                         "Bio must be at most 500 characters");
             }

@@ -54,7 +54,7 @@ public class UserController {
     @PatchMapping("/me")
     @Operation(
             summary = "Update own profile",
-            description = "Updates the authenticated user's own profile. Only provided fields are changed."
+            description = "Updates the authenticated user's own profile. Only provided fields are changed; send \"bio\": null to clear the bio."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profile updated",
