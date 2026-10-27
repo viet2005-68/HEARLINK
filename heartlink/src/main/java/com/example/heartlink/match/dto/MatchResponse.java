@@ -1,13 +1,14 @@
 package com.example.heartlink.match.dto;
 
 import com.example.heartlink.entity.Match;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
 
 public record MatchResponse(Long id,
                             MatchUserResponse user,
                             String status,
-                            Instant createdAt) {
+                            @JsonProperty("created_at") Instant createdAt) {
     public static MatchResponse from(Match match, Long currentUserId) {
         var otherUser = match.getUserA().getId().equals(currentUserId)
                 ? match.getUserB()

@@ -214,7 +214,7 @@ Example response:
       "id": 42,
       "user": { "id": 2, "name": "Binh", "bio": "Yêu bóng đá" },
       "status": "ACTIVE",
-      "createdAt": "2026-10-21T10:00:00Z"
+      "created_at": "2026-10-21T10:00:00Z"
     }
   ],
   "limit": 20,
