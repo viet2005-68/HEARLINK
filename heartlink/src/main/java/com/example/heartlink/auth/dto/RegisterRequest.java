@@ -9,4 +9,8 @@ public record RegisterRequest(@NotBlank @Email @Size(max = 255) String email,
                               @NotBlank @Size(min = 6, max = 72) String password,
                               @NotBlank @Size(max = 100) String name,
                               @Size(max = 500) String bio) {
+    /** Trim the email before validation so surrounding whitespace is not rejected by {@code @Email}. */
+    public RegisterRequest {
+        email = email == null ? null : email.trim();
+    }
 }
