@@ -48,12 +48,16 @@ INSERT INTO swipes (swiper_id, target_id, action, created_at) VALUES
 
 -- ===== Matches (cặp đã like nhau) =====
 -- Ràng buộc: user_a_id < user_b_id, UNIQUE (user_a_id, user_b_id)
-INSERT INTO matches (user_a_id, user_b_id, status, created_at) VALUES
-    (1, 2, 'ACTIVE', NOW()),  -- Anna  <-> Binh
-    (1, 4, 'ACTIVE', NOW()),  -- Anna  <-> David
-    (3, 4, 'ACTIVE', NOW()),  -- Carmen <-> David
-    (5, 6, 'ACTIVE', NOW()),  -- Eva   <-> Frank
-    (6, 7, 'ACTIVE', NOW());  -- Frank <-> Grace
+-- Derive matches from mutual likes so demo data obeys R3.
+INSERT INTO matches (user_a_id, user_b_id, status, created_at)
+SELECT s.swiper_id, s.target_id, 'ACTIVE', NOW()
+FROM swipes s
+JOIN swipes reverse_swipe
+  ON reverse_swipe.swiper_id = s.target_id
+ AND reverse_swipe.target_id = s.swiper_id
+WHERE s.action = 'LIKE'
+  AND reverse_swipe.action = 'LIKE'
+  AND s.swiper_id < s.target_id;
 
 -- ===== Notification history for the seeded matches =====
 -- Direct SQL seeds do not publish SSE events; new matches use MatchService.createForMutualLike.
