@@ -39,10 +39,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
-        Optional<Long> userId = header != null && header.regionMatches(true, 0, BEARER, 0, BEARER.length())
-                ? jwtService.verify(header.substring(BEARER.length()).trim())
+        Optional<JwtService.VerifiedToken> token = header != null && header.regionMatches(true, 0, BEARER, 0, BEARER.length())
+                ? jwtService.verifyToken(header.substring(BEARER.length()).trim())
                 : Optional.empty();
-        if (userId.isEmpty()) {
+        if (token.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -51,7 +51,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     "{\"error\":{\"code\":\"UNAUTHENTICATED\",\"message\":\"Missing or invalid access token\"}}");
             return;
         }
-        request.setAttribute(CurrentUser.ID, userId.get());
+        request.setAttribute(CurrentUser.ID, token.get().userId());
+        request.setAttribute(CurrentUser.EXPIRES_AT, token.get().expiresAt());
         chain.doFilter(request, response);
     }
 }

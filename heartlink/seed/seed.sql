@@ -4,7 +4,7 @@
 -- hoặc:
 --   docker compose exec -T postgres psql -U postgres -d heartlink < seed/seed.sql
 
--- Reset dữ liệu (CASCADE xóa luôn swipes + matches + refresh_tokens tham chiếu users)
+-- Reset dữ liệu (CASCADE xóa luôn swipes + matches + refresh_tokens + notifications)
 TRUNCATE TABLE users RESTART IDENTITY CASCADE;
 
 -- ===== Users =====
@@ -54,3 +54,10 @@ INSERT INTO matches (user_a_id, user_b_id, status, created_at) VALUES
     (3, 4, 'ACTIVE', NOW()),  -- Carmen <-> David
     (5, 6, 'ACTIVE', NOW()),  -- Eva   <-> Frank
     (6, 7, 'ACTIVE', NOW());  -- Frank <-> Grace
+
+-- ===== Notification history for the seeded matches =====
+-- Direct SQL seeds do not publish SSE events; new matches use MatchService.createForMutualLike.
+INSERT INTO notifications (user_id, match_id, type, created_at)
+SELECT user_a_id, id, 'MATCH_CREATED', created_at FROM matches
+UNION ALL
+SELECT user_b_id, id, 'MATCH_CREATED', created_at FROM matches;

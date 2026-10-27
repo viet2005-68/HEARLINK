@@ -7,6 +7,8 @@ import com.example.heartlink.match.dto.MatchResponse;
 import com.example.heartlink.repository.MatchRepository;
 import com.example.heartlink.repository.UserRepository;
 import com.example.heartlink.entity.Match;
+import com.example.heartlink.entity.User;
+import com.example.heartlink.notification.NotificationService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.http.HttpStatus;
@@ -17,13 +19,36 @@ import org.springframework.transaction.annotation.Transactional;
 public class MatchService {
     private final MatchRepository matchRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public MatchService(MatchRepository matchRepository, UserRepository userRepository) {
+    public MatchService(MatchRepository matchRepository, UserRepository userRepository,
+                        NotificationService notificationService) {
         this.matchRepository = matchRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
+    }
+
+    /**
+     * Internal write operation for the swipe workflow, after it establishes mutual likes.
+     * The caller owns reciprocal-like validation/concurrency control; this operation stores
+     * the canonical pair and both notifications atomically. There is no public create-match API.
+     */
+    @Transactional
+    public Match createForMutualLike(User first, User second) {
+        if (first.getId().equals(second.getId())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "SELF_MATCH", "A user cannot match with themselves");
+        }
+        boolean ordered = first.getId() < second.getId();
+        var match = matchRepository.saveAndFlush(Match.builder()
+                .userA(ordered ? first : second)
+                .userB(ordered ? second : first)
+                .status(MatchStatus.ACTIVE)
+                .build());
+        notificationService.recordMatchCreated(match);
+        return match;
     }
 
     @Transactional(readOnly = true)

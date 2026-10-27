@@ -6,6 +6,7 @@ package com.example.heartlink.common.security;
  */
 public final class CurrentUser {
     public static final String ID = "heartlink.currentUserId";
+    public static final String EXPIRES_AT = "heartlink.currentUserExpiresAt";
 
     private CurrentUser() { }
 }

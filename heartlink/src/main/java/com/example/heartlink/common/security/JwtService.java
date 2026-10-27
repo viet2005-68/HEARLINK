@@ -45,13 +45,24 @@ public class JwtService {
 
     /** Returns the user id when the token is well-formed, correctly signed and not expired. */
     public Optional<Long> verify(String token) {
+        return verifyToken(token).map(VerifiedToken::userId);
+    }
+
+    /** Authentication metadata also bounds the lifetime of long-running SSE connections. */
+    public Optional<VerifiedToken> verifyToken(String token) {
         try {
-            String subject = parser.parseSignedClaims(token).getPayload().getSubject();
-            return Optional.of(Long.valueOf(subject));
+            var claims = parser.parseSignedClaims(token).getPayload();
+            long userId = Long.parseLong(claims.getSubject());
+            if (userId < 1 || claims.getExpiration() == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new VerifiedToken(userId, claims.getExpiration().toInstant()));
         } catch (JwtException | IllegalArgumentException exception) {
             return Optional.empty();
         }
     }
 
     public long getExpiresIn() { return expiresIn; }
+
+    public record VerifiedToken(Long userId, Instant expiresAt) { }
 }

@@ -51,8 +51,9 @@ src/main/java/com/example/heartlink/
 ├── auth/             # Register / login / refresh / logout + DTOs
 ├── common/error/     # Shared { error: { code, message } } responses
 ├── common/security/  # JWT issuing/verification + shared auth filter
-├── entity/           # JPA entities + enums (User, Swipe, Match, RefreshToken)
+├── entity/           # JPA entities + enums (User, Swipe, Match, RefreshToken, Notification)
 ├── match/            # Versioned match API, business logic and DTOs
+├── notification/     # Own notification history + authenticated SSE
 ├── repository/       # Spring Data JPA interfaces
 └── ...               # Other business modules as they are implemented
 ```
@@ -152,6 +153,75 @@ Example response:
 }
 ```
 
+## Notification API v1
+
+Both endpoints require `Authorization: Bearer <access_token>` and are scoped to the current
+user. There is no public endpoint for creating notifications.
+
+| Endpoint | Success | Errors |
+|---|---|---|
+| `GET /api/v1/notifications?limit=20&cursor=...` | `200` own history, notification ID descending | `400 VALIDATION_ERROR`, `400 INVALID_CURSOR`, `401` |
+| `GET /api/v1/notifications/stream` | `200 text/event-stream`, live events | `401` |
+
+History uses a default limit of 20, accepts 1–50, and returns an opaque, user-bound cursor
+for the next page of **older** notifications. Omit the cursor to refresh the latest page.
+`next_cursor` is null when no older page remains.
+
+```json
+{
+  "items": [
+    {
+      "id": 123,
+      "type": "MATCH_CREATED",
+      "match_id": 55,
+      "created_at": "2026-10-27T09:00:00Z"
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+Open the SSE connection with a client that supports the Authorization header:
+
+```bash
+curl -N -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  http://localhost:8080/api/v1/notifications/stream
+```
+
+The stream sends a `connected` comment, heartbeat comments every 15 seconds, and events:
+
+```text
+id: 123
+event: match.created
+data: {"notification_id":123,"match_id":55}
+
+```
+
+Multiple devices/tabs for the same user receive their own copy of a live event. The
+connection ends at JWT expiry; refresh the token and reconnect. Browser-native EventSource
+cannot set a Bearer header: use a streaming fetch or an SSE client with header support.
+
+For initial connection and reconnects, connect the stream first, wait for its `connected`
+comment, then refresh history and paginate older pages as needed. Deduplicate live/history
+items by notification ID. SSE is live-only and does not automatically replay Last-Event-ID.
+Historical MATCH_CREATED notifications remain after unmatching; fetch current matches before
+treating a historical event as an active match.
+
+Match creation integration: the future swipe workflow must validate reciprocal likes and
+handle concurrent swipes, then call `MatchService.createForMutualLike(first, second)`.
+It stores the canonical match and one notification for each participant in the same
+transaction. `NotificationService.recordMatchCreated` requires an existing transaction;
+its SSE event is dispatched only after a successful commit. Rollback leaves neither the
+match nor its notifications. Offline users can retrieve history later.
+
+The swipe API is not implemented yet. Direct repository/SQL writes bypass this service
+hook; the seed script explicitly inserts notification history for its demo matches.
+
+Phase 1 uses an in-process SSE broadcaster for one application instance. Delivery is best
+effort: there is no durable dispatcher, cross-instance fan-out, delivery acknowledgement,
+or `published_at` tracking. History is durable; reliable live dispatch across failures and
+multiple instances remains a Phase 2 concern.
+
 ## Useful commands
 
 ```bash
@@ -174,7 +244,8 @@ Tables are created by Hibernate on startup (`spring.jpa.hibernate.ddl-auto=updat
 | `swipes` | One row per swiper/target pair, `action` = `LIKE` / `PASS` |
 | `matches` | Matched pair (`user_a_id` < `user_b_id`), `status` = `ACTIVE` / `CANCELLED` |
 | `refresh_tokens` | Hashed refresh tokens with `expires_at` / `revoked_at` |
+| `notifications` | One MATCH_CREATED notification per user/match, indexed by `(user_id, id)` |
 
-Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique, and foreign keys to users. PostgreSQL does not currently enforce `swiper_id <> target_id` or `user_a_id < user_b_id`; the swipe/match creation services are not implemented yet, so these rules still need enforcement. In particular, the match unique constraint alone permits both `(A, B)` and `(B, A)`.
+Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique, `notifications (user_id, match_id, type)` unique, and foreign keys. PostgreSQL does not currently enforce `swiper_id <> target_id` or `user_a_id < user_b_id`. The internal match creation service orders the pair and rejects self-matches; reciprocal-like validation and concurrent swipe handling still need implementation in the swipe workflow. The database match unique constraint alone permits both `(A, B)` and `(B, A)`.
 
 > Credentials in `docker-compose.yml` / `application*.properties` are dev defaults only — replace them with environment variables or secrets before deploying anywhere real.
