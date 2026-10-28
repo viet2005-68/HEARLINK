@@ -52,6 +52,7 @@ class Phase1ApiTests {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(filter).build();
         jdbc.update("delete from refresh_tokens");
         jdbc.update("delete from notifications");
+        jdbc.update("delete from messages");
         jdbc.update("delete from matches");
         jdbc.update("delete from swipes");
         jdbc.update("delete from users");
@@ -66,6 +67,73 @@ class Phase1ApiTests {
     }
 
     private String auth(Long id) { return "Bearer " + jwt.issue(id); }
+
+    @Test
+    void chatPersistsBothSidesPaginatesAndClosesOnUnmatch() throws Exception {
+        swipes.swipe(a, new SwipeRequest(b, "like"));
+        Long matchId = swipes.swipe(b, new SwipeRequest(a, "like")).match().id();
+        String path = "/api/v1/matches/" + matchId + "/messages";
+        mvc.perform(get(path).header("Authorization", auth(a)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        mvc.perform(post(path).header("Authorization", auth(a)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Chào bạn!\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.sender_id").value(a.intValue()))
+                .andExpect(jsonPath("$.content").value("Chào bạn!"))
+                .andExpect(jsonPath("$.created_at").isString());
+        Long firstId = jdbc.queryForObject("select min(id) from messages", Long.class);
+        mvc.perform(post(path).header("Authorization", auth(b)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Rất vui được làm quen\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.sender_id").value(b.intValue()));
+        Long latestId = jdbc.queryForObject("select max(id) from messages", Long.class);
+        mvc.perform(get(path + "?limit=1").header("Authorization", auth(a)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(latestId.intValue()))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.next_before").value(latestId.intValue()));
+        mvc.perform(get(path + "?limit=1&before=" + latestId).header("Authorization", auth(b)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(firstId.intValue()))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"next_before\":null")));
+        swipes.swipe(a, new SwipeRequest(c, "like"));
+        Long otherMatch = swipes.swipe(c, new SwipeRequest(a, "like")).match().id();
+        mvc.perform(get("/api/v1/matches/" + otherMatch + "/messages?before=" + latestId)
+                        .header("Authorization", auth(c)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        mvc.perform(get(path).header("Authorization", auth(c))).andExpect(status().isForbidden());
+        mvc.perform(post(path).header("Authorization", auth(c)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"not allowed\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/v1/matches/" + matchId).header("Authorization", auth(a)))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(path).header("Authorization", auth(b))).andExpect(status().isNotFound());
+        mvc.perform(post(path).header("Authorization", auth(a)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"too late\"}"))
+                .andExpect(status().isNotFound());
+        assertThat(count("messages")).isEqualTo(2);
+    }
+
+    @Test
+    void chatRequiresTokenAndValidatesBodyAndPagination() throws Exception {
+        swipes.swipe(a, new SwipeRequest(b, "like"));
+        Long matchId = swipes.swipe(b, new SwipeRequest(a, "like")).match().id();
+        String path = "/api/v1/matches/" + matchId + "/messages";
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"hi\"}"))
+                .andExpect(status().isUnauthorized());
+        for (String body : new String[]{"{}", "null", "{", "{\"content\":null}",
+                "{\"content\":\"   \"}", "{\"content\":\"" + "x".repeat(2001) + "\"}"}) {
+            mvc.perform(post(path).header("Authorization", auth(a)).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        }
+        for (String query : new String[]{"limit=0", "limit=51", "limit=abc", "before=0", "before=-1", "before=abc"}) {
+            mvc.perform(get(path + "?" + query).header("Authorization", auth(a)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        }
+        mvc.perform(get("/api/v1/matches/9223372036854775807/messages").header("Authorization", auth(a)))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(path).header("Authorization", auth(a)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"" + "x".repeat(2000) + "\"}"))
+                .andExpect(status().isCreated());
+        assertThat(count("messages")).isEqualTo(1);
+    }
 
     @Test
     void recommendationsExcludeSelfAndBothActionsButKeepIncomingLikes() throws Exception {
