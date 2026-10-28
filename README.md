@@ -1,322 +1,145 @@
-# Heartlink
+# Heartlink — Backend ứng dụng hẹn hò, Phase 1
 
-Dating backend — Phase 1. Spring Boot 4.1 (Java 21) + PostgreSQL 16, single deployable app and one database.
+## 1. Bài toán và phạm vi
 
-## Stack
+Heartlink giúp người dùng tìm người muốn làm quen, ghép đôi khi cả hai cùng thích nhau và nhắn tin sau khi ghép đôi. Ví dụ: Anna thích Bình thì hệ thống chỉ lưu lượt thích. Khi Bình cũng thích Anna, hệ thống tạo một **match** (cặp ghép đôi), thông báo cho hai người và cho phép họ trò chuyện.
 
-| Layer | Technology |
+Người dùng có thể tạo tài khoản, đăng nhập, chỉnh sửa hồ sơ và xem hồ sơ của người khác để chọn thích hoặc bỏ qua. Khi hai người cùng thích nhau, hệ thống sẽ ghép đôi, gửi thông báo và cho phép họ nhắn tin. Người dùng cũng có thể xem danh sách những người đã ghép đôi với mình hoặc hủy ghép đôi.
+
+**Tech stack**
+
+| Công nghệ | Mục đích |
 |---|---|
-| Language | Java 21 |
-| Framework | Spring Boot 4.1 — WebMVC, Data JPA, Validation |
-| Database | PostgreSQL 16 (Docker) |
-| ORM | Hibernate / JPA |
-| API docs | springdoc-openapi (Swagger UI) |
-| Password hashing | BCrypt (`spring-security-crypto`) |
+| Java 21, Spring Boot 4.1.1 | Xây dựng backend và API |
+| Spring Data JPA, Hibernate | Đọc/ghi database |
+| PostgreSQL 16 | Lưu dữ liệu |
+| JWT, BCrypt | Xác thực và băm mật khẩu |
+| SSE | Gửi thông báo trực tiếp |
+| OpenAPI, Swagger UI | Mô tả và gọi thử API |
+| Maven, Docker Compose | Build và chạy dự án |
 
-## Requirements
+## 2. Kiến trúc dự án và tổ chức mã nguồn
 
-- JDK 21
-- Docker + Docker Compose v2
+Dự án dùng kiến trúc **monolithic**: các chức năng đăng nhập, quẹt, match, chat và thông báo cùng chạy trong **một ứng dụng Spring Boot**, dùng chung **một database PostgreSQL**.
 
-## Project layout
+Mã nguồn chia theo chức năng: `auth`, `user`, `recommendation`, `swipe`, `match`, `chat`, `notification`. Mỗi module giữ controller, service và DTO của mình; entity và repository nằm trong các package dùng chung.
 
-```text
-love_love/
-├── README.md
-└── heartlink/
-    ├── docker-compose.yml     # postgres + app
-    ├── Dockerfile             # packages the pre-built JAR
-    ├── .dockerignore
-    ├── .gitignore
-    ├── pom.xml
-    ├── mvnw / mvnw.cmd
-    ├── seed/seed.sql          # demo data
-    └── src/
-        ├── main/java/com/example/heartlink/   # see Package structure
-        ├── main/resources/
-        │   ├── application.properties
-        │   └── application-docker.properties
-        └── test/java/com/example/heartlink/   # mirrors main packages
-```
 
-All commands below are run from `heartlink/`.
-
-## Package structure
-
-The existing JPA schema is in `entity/`. Endpoint code is organized by capability, with repository and shared error handling packages:
+Luồng xử lý request bên trong ứng dụng:
 
 ```text
-src/main/java/com/example/heartlink/
-├── HeartlinkApplication.java
-├── auth/             # Register / login / refresh / logout + DTOs
-├── common/error/     # Shared { error: { code, message } } responses
-├── common/security/  # JWT issuing/verification + shared auth filter
-├── entity/           # JPA entities + enums (User, Swipe, Match, RefreshToken, Notification)
-├── match/            # Versioned match API, business logic and DTOs
-├── notification/     # Own notification history + authenticated SSE
-├── recommendation/   # Unswiped public profiles + DTOs
-├── swipe/            # Like/pass and mutual matching + DTOs
-├── repository/       # Spring Data JPA interfaces
-└── ...               # Other business modules as they are implemented
+Client → JWT filter → Controller → Service → Repository → PostgreSQL
 ```
 
-Each module keeps its HTTP controller, service and DTOs close to its domain; JPA entities stay internal and are not returned directly.
+Controller nhận request; service kiểm tra quy tắc và xử lý nghiệp vụ; repository đọc/ghi database. Entity mô tả dữ liệu lưu trong bảng, còn DTO chọn các trường được nhận/trả qua API, tránh đưa mật khẩu băm ra ngoài.
 
-## Run
+```text
+heartlink/
+├── pom.xml, mvnw, mvnw.cmd        # Thư viện và công cụ build Maven
+├── Dockerfile, docker-compose.yml # Đóng gói và chạy app + database
+├── openapi.yaml, seed/seed.sql    # Đặc tả API và dữ liệu demo
+└── src/
+    ├── main/java/com/example/heartlink/
+    │   ├── HeartlinkApplication.java # Điểm khởi động
+    │   ├── auth/                    # Đăng ký, đăng nhập, refresh, logout
+    │   ├── user/                    # Xem và sửa hồ sơ của mình
+    │   ├── recommendation/          # Lấy hồ sơ chưa quẹt
+    │   ├── swipe/                   # Like/pass, kiểm tra like hai chiều
+    │   ├── match/                   # Tạo, xem và hủy cặp ghép đôi
+    │   ├── chat/                    # Gửi và đọc tin nhắn theo match
+    │   ├── notification/            # Lịch sử thông báo và kết nối SSE
+    │   ├── entity/, repository/     # Dữ liệu và truy vấn
+    │   └── common/                  # JWT và xử lý lỗi chung
+    ├── main/resources/              # Cấu hình thường và Docker
+    └── test/java/                   # Kiểm thử
+```
 
-### Option 1 — Everything in Docker
+Database có 6 bảng: `users` (tài khoản), `swipes` (like/pass), `matches` (cặp ghép đôi), `messages` (tin nhắn), `notifications` (thông báo), `refresh_tokens` (token đã hash).
+
+Hai yêu cầu kỹ thuật cần giữ khi sửa code:
+
+- **Không lưu dở dang luồng match:** swipe mới, match và hai thông báo cùng nằm trong transaction; lỗi làm rollback thì hoàn tác các thay đổi đó. Trước khi kiểm tra swipe, service khóa hai dòng user theo ID tăng dần để phối hợp các request đồng thời. Sự kiện SSE chỉ được gửi sau khi commit thành công.
+- **Không gửi tin sau khi hủy match:** thao tác gửi giữ khóa dòng match đến cuối transaction. Thao tác hủy cập nhật cùng dòng nên phải chờ nhau; nếu hủy hoàn tất trước thì gửi sau bị từ chối.
+
+## 3. Luồng sử dụng và quy tắc nghiệp vụ
+
+1. **Đăng ký, đăng nhập:** người dùng đăng nhập bằng email và mật khẩu. Backend trả token để xác định tài khoản trong các lần gọi API tiếp theo. Mật khẩu được hash bằng BCrypt trước khi lưu.
+2. **Xem hồ sơ:** người dùng có thể xem/sửa tên và giới thiệu của mình. Danh sách gợi ý loại chính mình và những người mình đã quẹt; hiện chỉ sắp xếp theo ID, chưa chọn theo tuổi, vị trí hay sở thích.
+3. **Quẹt hồ sơ:** `like` là thích, `pass` là bỏ qua. Không được tự quẹt hoặc quẹt cùng một người nhiều lần. Người đã like mình vẫn xuất hiện nếu mình chưa quẹt họ.
+4. **Tạo match:** khi có like hai chiều, backend tạo match ngay trong lần quẹt thứ hai và ghi một thông báo cho mỗi người. Trong database, ID nhỏ luôn nằm ở `user_a_id`, ID lớn ở `user_b_id` để lưu cặp theo cùng một thứ tự.
+5. **Chat:** chỉ hai người trong match đang hoạt động được gửi và đọc tin. Nội dung không được chỉ có khoảng trắng, tối đa 2.000 ký tự Java. Client gọi lại API định kỳ để lấy tin mới (polling); hiện chưa có chat realtime, ảnh hay trạng thái đã xem.
+6. **Hủy match:** một trong hai người có thể hủy. Backend đổi trạng thái sang `CANCELLED`, giữ dữ liệu cũ nhưng chặn các yêu cầu gửi/đọc tin mới sau khi hủy. Swipe cũ vẫn còn nên không thể quẹt lại để tạo match mới.
+7. **Thông báo:** người dùng xem lịch sử hoặc mở kết nối SSE để server gửi thông báo match mới xuống khi đang kết nối. SSE giữ kết nối HTTP để gửi nhiều sự kiện. Thông báo đã lưu vẫn đọc được khi người dùng quay lại app, kể cả sau khi hủy match.
+
+## 4. API và cách xem đặc tả
+
+Đặc tả nằm trong **[heartlink/openapi.yaml](heartlink/openapi.yaml)**. Có thể mở file bằng công cụ hỗ trợ preview OpenAPI, chẳng hạn Swagger Editor. Khi ứng dụng đang chạy, mở [Swagger UI](http://localhost:8080/swagger-ui/index.html) để xem và gọi thử API; bản đặc tả do ứng dụng sinh ra nằm tại `/v3/api-docs`.
+
+Các API nghiệp vụ cần header `Authorization: Bearer <access_token>`, ngoại trừ nhóm `/api/v1/auth/**`. Backend lấy danh tính từ token; client không tự chọn người gửi tin hoặc người thực hiện lượt quẹt.
+
+| API | Công việc |
+|---|---|
+| `POST /api/v1/auth/register` | Tạo tài khoản |
+| `POST /api/v1/auth/login` | Đăng nhập, nhận access token và refresh token |
+| `POST /api/v1/auth/refresh` | Đổi refresh token còn hiệu lực lấy bộ token mới |
+| `POST /api/v1/auth/logout` | Thu hồi refresh token được gửi lên |
+| `GET /api/v1/users/me` | Xem hồ sơ của mình |
+| `PATCH /api/v1/users/me` | Sửa tên, giới thiệu; `bio: null` để xóa giới thiệu |
+| `GET /api/v1/recommendations?limit=20` | Lấy hồ sơ chưa quẹt |
+| `POST /api/v1/swipes` | Gửi `{ "target_id": 2, "action": "like" }` hoặc `pass` |
+| `GET /api/v1/matches?limit=20&offset=0` | Xem các match đang hoạt động |
+| `DELETE /api/v1/matches/{id}` | Hủy match |
+| `POST /api/v1/matches/{matchId}/messages` | Gửi `{ "content": "Chào bạn!" }` |
+| `GET /api/v1/matches/{matchId}/messages?limit=20` | Đọc tin; gửi tiếp `before=next_before` để lấy tin cũ |
+| `GET /api/v1/notifications?limit=20` | Đọc thông báo; gửi tiếp `cursor=next_cursor` để lấy trang cũ |
+| `GET /api/v1/notifications/stream` | Mở SSE nhận sự kiện `match.created` |
+
+API dùng mã HTTP thông thường: `200/201` khi thành công, `204` khi hủy/logout thành công, `400` khi đầu vào không hợp lệ, `401` khi xác thực không hợp lệ, `403` khi thiếu quyền, `404` khi không tìm thấy tài nguyên theo quy tắc API và `409` khi email/lượt quẹt bị trùng. Lỗi nghiệp vụ có dạng:
+
+```json
+{ "error": { "code": "ALREADY_SWIPED", "message": "You have already swiped this user" } }
+```
+
+Access token mặc định sống 1 giờ, refresh token sống 7 ngày. Database chỉ lưu hash của refresh token; mỗi lần refresh sẽ thu hồi token cũ. Logout thu hồi refresh token được gửi, còn access token đã phát vẫn dùng được tới lúc hết hạn.
+
+## 5. Cách build, chạy và thử dự án
+
+Cần **JDK 21, Docker và Docker Compose v2**; lần đầu cần mạng để tải Maven, thư viện và image. Từ thư mục gốc repo:
 
 ```bash
-# 1. Build the JAR (the Docker image packages this file)
+cd heartlink
 ./mvnw clean package -DskipTests
-
-# 2. Build the image and start postgres + app
 docker compose up -d --build
+```
 
-# 3. Load demo data (only after the app has created the tables)
+Maven tạo JAR trong `target/`. Dockerfile chép JAR đã build vào image có Java runtime, nên phải build JAR trước. Compose chạy hai container, chờ PostgreSQL sẵn sàng rồi khởi động app, lưu dữ liệu DB trong volume `postgres_data`.
+
+Mở Swagger tại **http://localhost:8080/swagger-ui/index.html**. Sau khi app đã khởi động và tạo bảng, có thể nạp dữ liệu demo:
+
+```bash
 docker compose exec -T postgres psql -U postgres -d heartlink < seed/seed.sql
 ```
 
-### Option 2 — Database in Docker, app in your IDE
+**Seed xóa dữ liệu hiện có rồi nạp lại** 8 tài khoản, các lượt quẹt, 4 match và 8 thông báo. Đăng nhập thử bằng `anna@example.com` / `123456`, sao chép `access_token` vào nút **Authorize** trên Swagger. Muốn demo like hai chiều từ đầu, đăng ký hai tài khoản mới rồi lần lượt like nhau, lấy ID match để chat và thử hủy.
+
+Khi phát triển có thể chỉ chạy DB trong Docker rồi chạy app trong IDE hoặc bằng Maven:
 
 ```bash
 docker compose up -d postgres
 ./mvnw spring-boot:run
 ```
 
-`application.properties` connects to `localhost:5432`. The `docker` profile (`application-docker.properties`) is activated by Compose and connects to the `postgres` service name instead.
+App chạy trực tiếp kết nối `localhost:5432`; app trong Docker dùng profile `docker`, kết nối tới service `postgres:5432`. Database mặc định là `heartlink`, tài khoản `postgres` / `123456`. Hibernate tạo/cập nhật bảng khi app khởi động (`ddl-auto=update`). Trước khi triển khai thực tế cần thay thông tin mặc định, cấp `JWT_SECRET` riêng (ít nhất 32 byte) cho app và quản lý thay đổi schema bằng migration.
 
-## URLs
+Lệnh thường dùng: `docker compose logs -f app` để xem log; `docker compose down` để dừng nhưng giữ dữ liệu. Thêm `-v` sẽ xóa cả volume dữ liệu.
 
-| What | URL |
+## 6. Vấn đề dễ thấy và hướng Phase 2
+
+| Hiện trạng Phase 1 | Hướng cải tiến cần xem xét |
 |---|---|
-| API | <http://localhost:8080> |
-| Swagger UI | <http://localhost:8080/swagger-ui/index.html> |
-| PostgreSQL | `localhost:5432` — db `heartlink`, user `postgres`, password `123456` |
+| **1. Hồ sơ nổi tiếng có thể làm chậm trải nghiệm ghép đôi.** Ví dụ A được rất nhiều người cùng bấm thích. Mỗi lượt quẹt phải khóa cả dòng người gửi và người nhận, nên các request cùng liên quan A phải chờ nhau. Nếu A cũng bấm thích lại B trong lúc đó, request của A cũng có thể phải chờ: hai người đã bấm thích nhưng chưa thấy match và thông báo ngay, làm trải nghiệm thiếu tức thời. SSE chỉ gửi thông báo sau khi match đã được tạo và lưu thành công. | Cân nhắc khóa theo cặp để A–B và A–C xử lý song song, còn A–B và B–A vẫn dùng chung khóa. Cần kiểm tra tính đúng khi like đồng thời và đo riêng thời gian chờ khóa trước khi quyết định cải tiến. |
+| **2. Quẹt càng nhiều, lấy gợi ý càng chậm.** Ví dụ B đã quẹt 20.000 hồ sơ đầu tiên. Khi B mở app để xem tiếp, truy vấn hiện tại vẫn xét từ đầu danh sách, loại các hồ sơ đã quẹt rồi mới lấy đủ 20 hồ sơ chưa xem. Lịch sử càng dài thì phần phải bỏ qua càng lớn. | Tối ưu cách lấy hồ sơ chưa xem để giảm việc duyệt lại dữ liệu đã quẹt; so sánh thời gian truy vấn theo độ dài lịch sử và bảo đảm không gợi ý lại hồ sơ đã quẹt. |
+| **3. Mất phản hồi khiến người dùng không biết lượt thích đã thành công chưa.** Ví dụ B thích A, server đã lưu và tạo match nhưng phản hồi bị mất do mạng. Khi B gửi lại, Phase 1 trả `409 ALREADY_SWIPED` thay vì kết quả trước đó. Dữ liệu không bị tạo trùng nhưng client chưa nhận lại được kết quả thành công. | Cải thiện việc xử lý yêu cầu gửi lại khi mạng chập chờn, để người dùng nhận được kết quả lượt thích đã thực hiện mà không tạo thêm swipe hoặc match trùng. |
+| **4. Chưa giới hạn tần suất để hạn chế spam/bot.** Ví dụ một tài khoản dùng bot để quẹt hàng nghìn hồ sơ hoặc gửi tin liên tục, làm tăng tải và ảnh hưởng người dùng khác. Phase 1 có JWT để xác định tài khoản nhưng chưa giới hạn số lần gọi API; bot có token hợp lệ vẫn gửi được request liên tục. | Bổ sung cơ chế hạn chế các thao tác quá dồn dập để giảm spam, bảo vệ tài nguyên hệ thống và tránh ảnh hưởng trải nghiệm của người dùng khác. |
 
-## Auth API v1
-
-All endpoints under `/api/v1/**` except `/api/v1/auth/**` require `Authorization: Bearer <access_token>`. The check is done once in `common/security/JwtAuthFilter`; controllers never parse tokens themselves and read the current user with `@RequestAttribute(CurrentUser.ID) Long userId`. Missing/invalid/expired tokens get `401 {"error":{"code":"UNAUTHENTICATED",...}}`.
-
-Every seeded user has password `123456`.
-
-```http
-POST /api/v1/auth/login
-{ "email": "anna@example.com", "password": "123456" }
-```
-
-```json
-{ "access_token": "<jwt>", "token_type": "bearer", "expires_in": 3600, "refresh_token": "<opaque>" }
-```
-
-Wrong email or password → `401 INVALID_CREDENTIALS`.
-
-| Endpoint | Body | Success | Errors |
-|---|---|---|---|
-| `POST /api/v1/auth/register` | `{ email, password (6-72), name, bio? }` | `201 { id, email, name, bio }` | `400`, `409 EMAIL_TAKEN` |
-| `POST /api/v1/auth/refresh` | `{ "refresh_token": "..." }` | `200` new access + refresh token (old refresh token is revoked) | `401 INVALID_REFRESH_TOKEN` |
-| `POST /api/v1/auth/logout` | `{ "refresh_token": "..." }` | `204` (idempotent) | `400` |
-
-Access tokens are stateless HS256 JWTs and simply expire after `expires_in`; logout revokes the refresh token so no new access tokens can be obtained. Refresh tokens are stored only as SHA-256 hashes in `refresh_tokens` and live 7 days. Config: `app.jwt.secret` (env `JWT_SECRET`, ≥ 32 bytes), `app.jwt.expires-in`, `app.jwt.refresh-expires-in`.
-
-## Recommendations and Swipe API v1
-
-Both endpoints require `Authorization: Bearer <access_token>`.
-
-### GET /api/v1/recommendations?limit=20
-
-Returns `{ "items": [{ "id": 17, "name": "Linh", "bio": "Thích leo núi" }] }`.
-Excludes the current user and every profile they have already liked or passed.
-Incoming likes do not exclude a profile. Results are ordered by user ID.
-Empty results return `items: []`.
-`limit` defaults to 20; values outside 1–50 or invalid numbers return 400.
-Missing/invalid tokens and deleted current users return 401.
-
-### POST /api/v1/swipes
-
-Request: `{ "target_id": 17, "action": "like" }`. Only lowercase `like` and `pass` are accepted.
-The swiper ID always comes from the JWT, never the request body.
-
-Response 201 without a match:
-
-```json
-{ "swipe_id": 903, "matched": false, "match": null }
-```
-Response 201 for the second mutual like:
-
-```json
-{ "swipe_id": 904, "matched": true, "match": { "id": 55, "with_user_id": 17 } }
-```
-
-| Status | Reason / error code |
-|---|---|
-| 400 | Invalid body/action/target ID (`VALIDATION_ERROR`), self-swipe (`SELF_SWIPE`) |
-| 401 | Missing/invalid token (`UNAUTHENTICATED`), deleted caller (`USER_NOT_FOUND`) |
-| 404 | Target does not exist (`TARGET_NOT_FOUND`) |
-| 409 | Already liked or passed this target (`ALREADY_SWIPED`) |
-
-The service saves the swipe and any resulting match in one READ_COMMITTED transaction.
-It locks both user rows in ascending ID order before checking existing swipes.
-Concurrent swipes involving the same user wait for the lock. Matches use
-`user_a_id < user_b_id`; database unique constraints prevent duplicate pairs.
-Cancelling a match keeps both swipes, so neither participant can swipe again.
-All swipe writes must use this locking order. Lock contention can be measured in Phase 2.
-
-## Testing the Phase 1 flow
-
-Requires JDK 21 and Maven dependency access. Unit tests without PostgreSQL:
-
-```bash
-./mvnw -Dtest=AuthServiceTests,JwtServiceTests,JwtAuthFilterTests,RecommendationServiceTests,SwipeServiceTests test
-```
-
-PostgreSQL integration tests create/drop the schema in `heartlink_test` on port 55432.
-Use the separate database provided by `docker-compose.test.yml`.
-
-```bash
-docker compose -f docker-compose.test.yml up -d --wait
-HEARTLINK_DB_TESTS=true ./mvnw -Dtest=Phase1ApiTests test
-docker compose -f docker-compose.test.yml down -v
-```
-
-The integration suite checks HTTP authentication/validation/JSON, recommendation limits
-and exclusions, mutual likes, cancellation without reswiping, concurrent reciprocal and
-duplicate swipes, and rollback when match insertion fails. It is skipped unless
-`HEARTLINK_DB_TESTS=true`.
-
-Demo seed derives matches directly from reciprocal LIKE rows. For the eight users,
-the expected match pairs are `(1,2)`, `(1,3)`, `(1,4)`, `(4,7)`.
-
-## Match API v1
-
-The match endpoints use the existing `matches` table and schema and require a Bearer token (see Auth API).
-
-```http
-GET /api/v1/matches?limit=20&offset=0
-Authorization: Bearer <access_token>
-```
-
-Returns only active matches involving that user. `limit` defaults to 20 and is capped at 50; `offset` defaults to 0. Each result exposes the other user's public profile fields, plus status and creation time.
-
-```http
-DELETE /api/v1/matches/1
-Authorization: Bearer <access_token>
-```
-
-Returns `204 No Content` when the active match belongs to the user. It soft-cancels the match by setting `status=CANCELLED` and `cancelled_at`; the match row and old swipe records remain. An active match owned by other users returns `403 MATCH_FORBIDDEN`; a missing or cancelled match returns `404 MATCH_NOT_FOUND`. Errors use the shared JSON envelope.
-
-Example response:
-
-```json
-{
-  "items": [
-    {
-      "id": 42,
-      "user": { "id": 2, "name": "Binh", "bio": "Yêu bóng đá" },
-      "status": "ACTIVE",
-      "created_at": "2026-10-21T10:00:00Z"
-    }
-  ],
-  "limit": 20,
-  "offset": 0,
-  "total": 1
-}
-```
-
-## Notification API v1
-
-Both endpoints require `Authorization: Bearer <access_token>` and are scoped to the current
-user. There is no public endpoint for creating notifications.
-
-| Endpoint | Success | Errors |
-|---|---|---|
-| `GET /api/v1/notifications?limit=20&cursor=...` | `200` own history, notification ID descending | `400 VALIDATION_ERROR`, `400 INVALID_CURSOR`, `401` |
-| `GET /api/v1/notifications/stream` | `200 text/event-stream`, live events | `401` |
-
-History uses a default limit of 20, accepts 1–50, and returns an opaque, user-bound cursor
-for the next page of **older** notifications. Omit the cursor to refresh the latest page.
-`next_cursor` is null when no older page remains.
-
-```json
-{
-  "items": [
-    {
-      "id": 123,
-      "type": "MATCH_CREATED",
-      "match_id": 55,
-      "created_at": "2026-10-27T09:00:00Z"
-    }
-  ],
-  "next_cursor": null
-}
-```
-
-Open the SSE connection with a client that supports the Authorization header:
-
-```bash
-curl -N -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  http://localhost:8080/api/v1/notifications/stream
-```
-
-The stream sends a `connected` comment, heartbeat comments every 15 seconds, and events:
-
-```text
-id: 123
-event: match.created
-data: {"notification_id":123,"match_id":55}
-
-```
-
-Multiple devices/tabs for the same user receive their own copy of a live event. The
-connection ends at JWT expiry; refresh the token and reconnect. Browser-native EventSource
-cannot set a Bearer header: use a streaming fetch or an SSE client with header support.
-
-For initial connection and reconnects, connect the stream first, wait for its `connected`
-comment, then refresh history and paginate older pages as needed. Deduplicate live/history
-items by notification ID. SSE is live-only and does not automatically replay Last-Event-ID.
-Historical MATCH_CREATED notifications remain after unmatching; fetch current matches before
-treating a historical event as an active match.
-
-Match creation integration: `SwipeService` validates reciprocal likes under its ordered
-user-row locks, then calls `MatchService.createForMutualLike(first, second)`.
-It stores the canonical match and one notification for each participant in the same
-transaction. `NotificationService.recordMatchCreated` requires an existing transaction;
-its SSE event is dispatched only after a successful commit. Rollback leaves neither the
-match nor its notifications. Offline users can retrieve history later.
-
-The HTTP swipe flow creates notifications automatically on the second mutual like.
-Direct repository/SQL writes bypass this service hook; the seed script explicitly inserts
-notification history for its four demo matches (eight notifications total).
-
-Phase 1 uses an in-process SSE broadcaster for one application instance. Delivery is best
-effort: there is no durable dispatcher, cross-instance fan-out, delivery acknowledgement,
-or `published_at` tracking. History is durable; reliable live dispatch across failures and
-multiple instances remains a Phase 2 concern.
-
-## Useful commands
-
-```bash
-docker compose logs -f app        # app logs
-docker compose logs -f postgres   # database logs
-docker compose ps                 # container status
-docker compose exec postgres psql -U postgres -d heartlink   # psql shell
-docker compose down               # stop, keep data
-docker compose down -v            # stop and delete data
-./mvnw clean                      # remove build output
-```
-
-## Database
-
-Tables are created by Hibernate on startup (`spring.jpa.hibernate.ddl-auto=update`), so no manual SQL is needed.
-
-| Table | Purpose |
-|---|---|
-| `users` | Account + profile, `email` unique |
-| `swipes` | One row per swiper/target pair, `action` = `LIKE` / `PASS` |
-| `matches` | Matched pair (`user_a_id` < `user_b_id`), `status` = `ACTIVE` / `CANCELLED` |
-| `refresh_tokens` | Hashed refresh tokens with `expires_at` / `revoked_at` |
-| `notifications` | One MATCH_CREATED notification per user/match, indexed by `(user_id, id)` |
-
-Constraints enforced by the entities: `users.email` unique, `swipes (swiper_id, target_id)` unique, `matches (user_a_id, user_b_id)` unique, `notifications (user_id, match_id, type)` unique, and foreign keys. PostgreSQL does not currently enforce `swiper_id <> target_id` or `user_a_id < user_b_id`. `SwipeService` rejects self-swipes and locks both users in ascending ID order; `MatchService.createForMutualLike` stores the canonical pair and both notifications in the same transaction. The database match unique constraint alone would permit both `(A, B)` and `(B, A)`, so all match writers must preserve that order.
-
-> Credentials in `docker-compose.yml` / `application*.properties` are dev defaults only — replace them with environment variables or secrets before deploying anywhere real.
+Nhóm tiếp nhận Phase 2 nên chạy luồng hai tài khoản từ đăng ký đến hủy match, giữ các quy tắc và test hiện có, rồi đo tải để chọn phần cải tiến. Khi trình bày 5–7 phút, có thể dành 1 phút cho bài toán, 2 phút cho nghiệp vụ, 1 phút cho API/tổ chức code, 1 phút cho triển khai và thời gian còn lại cho các vấn đề trên.
