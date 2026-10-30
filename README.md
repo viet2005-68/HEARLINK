@@ -150,3 +150,10 @@ Lệnh thường dùng: `docker compose logs -f app` để xem log; `docker comp
 | **4. Chat tạo tải thừa khi không có tin mới.** Hiện backend chưa đẩy tin chat mới xuống client. Nếu client gọi lại API định kỳ để cập nhật cuộc trò chuyện, mỗi lần vẫn truy vấn và trả các tin gần nhất dù không ai nhắn thêm. Càng nhiều người mở chat thì càng nhiều request chỉ tải lại dữ liệu cũ. | Cải thiện cách cập nhật tin nhắn để giảm các lần gọi API và đọc database không cần thiết, đồng thời giúp người nhận thấy tin mới sớm hơn. Có thể đẩy tin mới qua kênh SSE hiện có (kết hợp pub/sub nếu chạy nhiều instance), hoặc giữ polling nhưng dùng ETag/304 Not Modified. |
 | **5. Mất phản hồi khiến người dùng không biết lượt thích đã thành công chưa.** Ví dụ B thích A, server đã lưu và tạo match nhưng phản hồi bị mất do mạng. Khi B gửi lại, Phase 1 trả `409 ALREADY_SWIPED` thay vì kết quả trước đó. Dữ liệu không bị tạo trùng nhưng client chưa nhận lại được kết quả thành công. | Cải thiện việc xử lý yêu cầu gửi lại khi mạng chập chờn, để người dùng nhận được kết quả lượt thích đã thực hiện mà không tạo thêm swipe hoặc match trùng, hoặc có thể sử dụng các idempotent endpoint/ idempotent key. |
 | **6. Chưa giới hạn tần suất để hạn chế spam/bot.** Ví dụ một tài khoản dùng bot để quẹt hàng nghìn hồ sơ hoặc gửi tin liên tục, làm tăng tải và ảnh hưởng người dùng khác. Phase 1 có JWT để xác định tài khoản nhưng chưa giới hạn số lần gọi API; bot có token hợp lệ vẫn gửi được request liên tục. | Bổ sung cơ chế hạn chế các thao tác quá dồn dập để giảm spam, bảo vệ tài nguyên hệ thống và tránh ảnh hưởng người dùng khác. Có thể giới hạn theo từng thao tác và từng user (ví dụ token bucket), trả 429 kèm Retry-After, đặt hạn mức swipe, và bổ sung phát hiện bot theo tín hiệu hành vi. |
+
+## 7. Tài liệu và notebook benchmark
+
+- [Đặc tả API (OpenAPI)](heartlink/openapi.yaml).
+- Thiết kế database: [v1.1](heartlink/docs/Database-v1.1.pdf), [v1.0](heartlink/docs/Database-v1.0.pdf).
+- [Tài liệu đánh giá Phase 1 v1.0](heartlink/docs/Evaluation-Phase1-v1.0.pdf).
+- [Notebook benchmark trên Kaggle](heartlink/benchmark/heartlink_kaggle_bench.ipynb).
