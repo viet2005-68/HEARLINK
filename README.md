@@ -135,6 +135,13 @@ Lệnh thường dùng: `docker compose logs -f app` để xem log; `docker comp
 
 ## 6. Vấn đề dễ thấy và hướng Phase 2
 
+**Ở đây, nhóm chú trọng một bài toán cụ thể: Tập trung vào việc khi lượng dữ liệu lớn, các hoạt động đọc ghi vào cơ sở dữ liệu diễn ra nhiều thì có gây ra hiện tượng chậm phản hồi hay không? Vì vậy nhóm đang chọn những công nghệ cụ thể gần gũi nhất, không làm bài toán bị phân rã thành các miền khác nhau, mà tập trung vào một khía cạnh duy nhất: Các thao tác vào cơ sở dữ liệu.**
+
+**Khi A swipe B mà không khóa lại 2 dòng dữ liệu thì có thể xảy ra tình trạng khi A và B cùng swipe nhau trong 1 thời điểm, khi kiểm tra đối phương chưa thích lại => sai lệch dữ liệu, sẽ không bao giờ vào được bảng matches. Nhóm đang chọn solution dễ nhất và đơn giản nhất là khóa theo dòng của các user, chính vì vậy nên cũng sẽ gây ra hiện tượng phải chờ nhả khóa mới có thể thực hiện được tiếp**
+
+**Các vấn đề đi sau là những vấn đề dễ thấy hơn, đọc để loại người đã thích, quá tải lượt swipe, nhiều tài nguyên cho chat, mất response hoặc là rate-limiting lượt quẹt**
+
+
 | Hiện trạng Phase 1 | Hướng cải tiến cần xem xét |
 |---|---|
 | **1. Hồ sơ nổi tiếng có thể làm chậm trải nghiệm ghép đôi.** Ví dụ A được rất nhiều người cùng bấm thích. Mỗi lượt quẹt phải khóa cả dòng người gửi và người nhận, nên các request cùng liên quan A phải chờ nhau. Nếu A cũng bấm thích lại B trong lúc đó, request của A cũng có thể phải chờ: hai người đã bấm thích nhưng chưa thấy match và thông báo ngay, làm trải nghiệm thiếu tức thời. SSE chỉ gửi thông báo sau khi match đã được tạo và lưu thành công. | Cân nhắc khóa theo cặp để A–B và A–C xử lý song song, còn A–B và B–A vẫn dùng chung khóa. Cần kiểm tra tính đúng khi like đồng thời và đo riêng thời gian chờ khóa trước khi quyết định cải tiến. |
